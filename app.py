@@ -3,9 +3,9 @@ import gspread
 import pandas as pd
 import datetime
 import pytz
-import hashlib 
+import re # Importação necessária para a limpeza da chave privada
 
-# --- CONFIGURAÇÕES DA PLANILHA (CONFIRME) ---
+# --- CONFIGURAÇÕES DA PLANILHA ---
 PLANILHA_ID = "1pvPr2wDSnPpO4Vi0vE4kHwVCk79YIMs1XtoZ8TYmAsg"
 NOME_ABA = "Página1"
 FUSO_BRASILIA = pytz.timezone('America/Sao_Paulo')
@@ -16,30 +16,37 @@ FUSO_BRASILIA = pytz.timezone('America/Sao_Paulo')
 
 @st.cache_resource(ttl=3600)
 def get_sheets_client():
-    """Conecta ao Google Sheets, lendo as credenciais de st.secrets."""
+    """Conecta ao Google Sheets, GARANTINDO a limpeza do formato da chave."""
     
     try:
-        # Tenta ler as credenciais de st.secrets
+        # 1. Tenta ler as credenciais de st.secrets
         creds_dict = dict(st.secrets["gcp_service_account"])
     except KeyError:
         st.error("ERRO: As credenciais do Google Sheets não foram configuradas nos Secrets do Streamlit Cloud.")
         st.stop()
         
+    # 2. LIMPEZA CRÍTICA DA PRIVATE_KEY:
+    # Remove caracteres indesejados e garante o formato PEM correto para o gspread.
     if 'private_key' in creds_dict and creds_dict['private_key']:
-        # Limpeza para garantir que o gspread aceite a chave
-        creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
+        key = creds_dict['private_key']
+        # Corrige as quebras de linha que o Streamlit Cloud pode ter escapado (ex: substitui \\n por \n)
+        key = re.sub(r'\\n', '\n', key)
+        # Remove espaços no início e fim
+        key = key.strip()
+        creds_dict['private_key'] = key
     
     try:
+        # 3. Tenta a autenticação com a chave limpa
         gc = gspread.service_account_from_dict(creds_dict)
         return gc
     except Exception as e:
-        st.error(f"Falha na Autenticação (gspread). Verifique o formato do segredo. Erro: {e}")
+        # Se falhar, o erro estará no Secret injetado ou no compartilhamento.
+        st.error(f"Falha na Autenticação (gspread). Verifique o formato do Secret e o compartilhamento da planilha. Erro: {e}")
         st.stop()
 
 
 def initialize_session_state():
     """Inicializa o estado da sessão do Streamlit."""
-    # Garante que a aplicação inicie na Fase 1 se não estiver definida
     if 'items_nota' not in st.session_state:
         st.session_state.items_nota = []
     if 'fase' not in st.session_state:
@@ -66,7 +73,7 @@ def formatar_para_registro(dados_nota, item, dados_finais, data_lancamento, hora
 
 
 # ----------------------------------------------------
-# 2. FLUXO PRINCIPAL DA APLICAÇÃO (Onde o Script Começa)
+# 2. FLUXO PRINCIPAL DA APLICAÇÃO (Função main)
 # ----------------------------------------------------
 
 def main():
@@ -248,7 +255,7 @@ def main():
         if st.button("Iniciar Novo Lançamento"):
             # Limpa todos os dados de sessão
             for key in list(st.session_state.keys()):
-                if key not in ['gcp_service_account']: # Deixa apenas o secret
+                if key not in ['gcp_service_account']: 
                     del st.session_state[key]
             st.rerun()
 
