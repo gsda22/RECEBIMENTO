@@ -3,7 +3,6 @@ import gspread
 import pandas as pd
 import datetime
 import pytz
-import streamlit_authenticator as stauth
 import hashlib 
 
 # --- CONFIGURAÇÕES DA PLANILHA (CONFIRME) ---
@@ -11,34 +10,6 @@ PLANILHA_ID = "1pvPr2wDSnPpO4Vi0vE4kHwVCk79YIMs1XtoZ8TYmAsg"
 NOME_ABA = "Página1"
 FUSO_BRASILIA = pytz.timezone('America/Sao_Paulo')
 
-# --- CONFIGURAÇÕES DE AUTENTICAÇÃO ---
-
-# 1. GERAÇÃO E CRIPTOGRAFIA DE SENHAS (CRÍTICO: Gere os hashes no Streamlit Cloud)
-# Senhas de texto puro: ['123456', '102030']
-# Os hashes abaixo são o resultado da criptografia dessas senhas.
-hashed_passwords_list = stauth.Hasher(['123456', '102030']).generate()
-
-config = {
-    'credentials': {
-        'usernames': {
-            'gabrielsantos': {
-                'email': 'gabriel@empresa.com',
-                'name': 'Gabriel Santos',
-                'password': hashed_passwords_list[0]
-            },
-            'prevecao': {
-                'email': 'prevencao@empresa.com',
-                'name': 'Prevenção de Perdas',
-                'password': hashed_passwords_list[1]
-            }
-        }
-    },
-    'cookie': {
-        'expiry_days': 30,
-        'key': 'chave_secreta_app_recebimento_v2', # MUDE ESTA CHAVE!!!
-        'name': 'app_login_cookie_v2'
-    }
-}
 # ----------------------------------------------------
 # 1. FUNÇÕES DE CONEXÃO E UTILIDADES
 # ----------------------------------------------------
@@ -68,6 +39,7 @@ def get_sheets_client():
 
 def initialize_session_state():
     """Inicializa o estado da sessão do Streamlit."""
+    # Garante que a aplicação inicie na Fase 1 se não estiver definida
     if 'items_nota' not in st.session_state:
         st.session_state.items_nota = []
     if 'fase' not in st.session_state:
@@ -94,11 +66,10 @@ def formatar_para_registro(dados_nota, item, dados_finais, data_lancamento, hora
 
 
 # ----------------------------------------------------
-# 2. FUNÇÃO PRINCIPAL DA APLICAÇÃO (CÓDIGO EXECUTADO APÓS O LOGIN)
+# 2. FLUXO PRINCIPAL DA APLICAÇÃO (Onde o Script Começa)
 # ----------------------------------------------------
 
-def app_principal(nome_completo):
-    """Contém toda a lógica de lançamento de mercadorias."""
+def main():
     
     st.set_page_config(page_title="Lançamento de Recebimento", layout="wide")
     st.title("Sistema de Lançamento de Recebimento de Mercadorias")
@@ -222,7 +193,6 @@ def app_principal(nome_completo):
     # --- FASE 3: FECHAMENTO E AUDITORIA ---
     elif st.session_state.fase == 3:
         st.header("3. Fechamento e Auditoria")
-        st.info(f"Usuário Logado: {nome_completo}")
         st.info(f"Pronto para registrar {len(st.session_state.items_nota)} itens da NF {st.session_state.dados_nota.get('numero_nota', 'N/D')}.")
         
         with st.form(key='form_fechamento'):
@@ -276,43 +246,11 @@ def app_principal(nome_completo):
         st.write("O registro foi salvo com sucesso na sua planilha.")
         
         if st.button("Iniciar Novo Lançamento"):
+            # Limpa todos os dados de sessão
             for key in list(st.session_state.keys()):
-                if key not in ['gcp_service_account', 'authentication_status', 'name', 'username']:
+                if key not in ['gcp_service_account']: # Deixa apenas o secret
                     del st.session_state[key]
             st.rerun()
 
-
-# ----------------------------------------------------
-# 3. LÓGICA DE AUTENTICAÇÃO (Onde o Script Começa)
-# ----------------------------------------------------
-
-# Cria o objeto de autenticação
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days']
-)
-
-# Tela de Login
-name, authentication_status, username = authenticator.login('Login de Acesso', 'main')
-
-# Lógica de Status
-if authentication_status:
-    # 3.1. SUCESSO: Usuário logado
-    
-    # Exibe o botão de Logout na barra lateral
-    with st.sidebar:
-        st.success(f"Bem-vindo(a), {name}!")
-        authenticator.logout('Sair', 'main') # Coloca o botão 'Sair' no corpo principal
-    
-    # Executa o aplicativo principal (Fases 1-4)
-    app_principal(name) 
-
-elif authentication_status is False:
-    # 3.2. FALHA: Credenciais incorretas
-    st.error('Usuário/Senha incorretos')
-
-elif authentication_status is None:
-    # 3.3. PENDENTE: Aguardando login
-    st.warning('Por favor, insira suas credenciais para acessar o sistema.')
+if __name__ == '__main__':
+    main()
