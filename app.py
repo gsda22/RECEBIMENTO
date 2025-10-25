@@ -4,8 +4,7 @@ import pandas as pd
 import datetime
 import pytz
 import streamlit_authenticator as stauth
-import yaml
-from yaml.loader import SafeLoader
+import hashlib 
 
 # --- CONFIGURAÇÕES DA PLANILHA (CONFIRME) ---
 PLANILHA_ID = "1pvPr2wDSnPpO4Vi0vE4kHwVCk79YIMs1XtoZ8TYmAsg"
@@ -13,44 +12,38 @@ NOME_ABA = "Página1"
 FUSO_BRASILIA = pytz.timezone('America/Sao_Paulo')
 
 # --- CONFIGURAÇÕES DE AUTENTICAÇÃO ---
-# Nomes e senhas de exemplo. Em um projeto real, armazene isso em Secrets!
-# Senhas (hashed) geradas para 'senha123' e 'seguranca456'
-hashed_passwords = ['stauth.Hasher(['senha123', 'seguranca456']).generate()[0]', 
-                    'stauth.Hasher(['senha123', 'seguranca456']).generate()[1]']
+
+# 1. GERAÇÃO E CRIPTOGRAFIA DE SENHAS (CRÍTICO: Gere os hashes no Streamlit Cloud)
+# Senhas de texto puro: ['123456', '102030']
+# Os hashes abaixo são o resultado da criptografia dessas senhas.
+hashed_passwords_list = stauth.Hasher(['123456', '102030']).generate()
 
 config = {
     'credentials': {
         'usernames': {
-            'joaosilva': {
-                'email': 'joao@empresa.com',
-                'name': 'João Silva',
-                'password': stauth.Hasher(['senha123'])[0] # Exemplo
+            'gabrielsantos': {
+                'email': 'gabriel@empresa.com',
+                'name': 'Gabriel Santos',
+                'password': hashed_passwords_list[0]
             },
-            'mariaoliver': {
-                'email': 'maria@empresa.com',
-                'name': 'Maria Oliveira',
-                'password': stauth.Hasher(['seguranca456'])[0] # Exemplo
+            'prevecao': {
+                'email': 'prevencao@empresa.com',
+                'name': 'Prevenção de Perdas',
+                'password': hashed_passwords_list[1]
             }
         }
     },
     'cookie': {
         'expiry_days': 30,
-        'key': 'chave_secreta_app_recebimento', # MUDE ESTA CHAVE!!!
-        'name': 'app_login_cookie'
+        'key': 'chave_secreta_app_recebimento_v2', # MUDE ESTA CHAVE!!!
+        'name': 'app_login_cookie_v2'
     }
 }
 # ----------------------------------------------------
 # 1. FUNÇÕES DE CONEXÃO E UTILIDADES
 # ----------------------------------------------------
 
-# (Mantenha as funções get_sheets_client, initialize_session_state, formatar_para_registro
-#  exatamente como estavam. O código será executado dentro de app_principal.)
-
-# A função get_sheets_client() deve estar aqui, lendo st.secrets
-# ... [COLE A FUNÇÃO get_sheets_client AQUI] ...
-# ... [COLE A FUNÇÃO initialize_session_state AQUI] ...
-# ... [COLE A FUNÇÃO formatar_para_registro AQUI] ...
-
+@st.cache_resource(ttl=3600)
 def get_sheets_client():
     """Conecta ao Google Sheets, lendo as credenciais de st.secrets."""
     
@@ -84,6 +77,7 @@ def initialize_session_state():
 
 def formatar_para_registro(dados_nota, item, dados_finais, data_lancamento, hora_lancamento):
     """Formata uma linha de dados para ser inserida na planilha."""
+    # ORDEM: Data Lançamento, Hora Lançamento, Fornecedor, Nº da Nota, Valor Total NF, Produto, Qtd NF, Qtd Recebida (Físico), Divergência (Qtd), Encarregado, Auditor (PP)
     return [
         data_lancamento,
         hora_lancamento,
@@ -126,7 +120,7 @@ def app_principal(nome_completo):
     # --- FASE 1: DADOS DA NOTA ---
     if st.session_state.fase == 1:
         st.header("1. Dados Fixos da Nota")
-        # ... (Restante da lógica da Fase 1, 2, 3 e 4) ...
+        
         with st.form(key='form_dados_nota'):
             col1, col2 = st.columns(2)
             with col1:
@@ -238,9 +232,6 @@ def app_principal(nome_completo):
             with col_a:
                 auditor = st.text_input("Nome do Auditor (Prevenção de Perdas):", key='auditor_input')
                 
-            # Sugestão: Preencher automaticamente um dos campos com o nome do usuário logado
-            # Ex: if nome_completo == "Maria Oliveira": auditor = nome_completo 
-            
             submitted_fechamento = st.form_submit_button("🚀 Registrar Lançamento na Planilha")
 
             if submitted_fechamento:
